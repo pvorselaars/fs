@@ -8,7 +8,7 @@
 
 int read_mbr(const char *filename, mbr_t * mbr)
 {
-	FILE *disk = fopen(filename, "wb+");
+	FILE *disk = fopen(filename, "rb");
 	if (!disk) {
 		return -1;
 	}
@@ -163,5 +163,6 @@ int main(int argc, char *argv[])
 			return 1;
 		}
 	}
+
 
 }
