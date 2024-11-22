@@ -34,9 +34,9 @@ typedef struct {
 
 int output;
 MasterBootRecord disk_mbr;
-MasterBootRecord mbr = 
-{
-	.Sign = 0xaa55 };
+MasterBootRecord mbr = {
+	.Sign = 0xaa55
+};
 
 void menu()
 {
@@ -49,7 +49,7 @@ void menu()
 	printf("q\tquit\n");
 }
 
-void print_mbr(MasterBootRecord *mbr)
+void print_mbr(MasterBootRecord * mbr)
 {
 	printf("Disk signature: 0x%04x\n", *mbr->DiskSignature);
 
@@ -83,7 +83,8 @@ int write_mbr()
 	return 0;
 }
 
-void create_partition(){
+void create_partition()
+{
 	char *buffer;
 	size_t bufsize = 32;
 	PartitionRecord part;
@@ -95,7 +96,7 @@ void create_partition(){
 		exit(EXIT_FAILURE);
 	}
 
-	printf("Partition [%d]: ", id+1);
+	printf("Partition [%d]: ", id + 1);
 	getline(&buffer, &bufsize, stdin);
 	buffer[strcspn(buffer, "\n")] = 0;
 
@@ -104,14 +105,14 @@ void create_partition(){
 		if (id > 4)
 			id = 4;
 	}
-	
+
 	if (id > 0) {
-		printf("Start LBA [%d]: ", mbr.Partition[id-1].StartingLBA + mbr.Partition[id-1].Size + 1 );
+		printf("Start LBA [%d]: ", mbr.Partition[id - 1].StartingLBA + mbr.Partition[id - 1].Size + 1);
 	} else {
 		printf("Start LBA [%d]: ", 0);
 	}
 
-  getline(&buffer, &bufsize, stdin);
+	getline(&buffer, &bufsize, stdin);
 	buffer[strcspn(buffer, "\n")] = 0;
 
 	if (isdigit(*buffer)) {
