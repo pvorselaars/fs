@@ -33,10 +33,7 @@ typedef struct {
 #pragma pack()
 
 int output;
-MasterBootRecord disk_mbr;
-MasterBootRecord mbr = {
-	.Sign = 0xaa55
-};
+MasterBootRecord mbr, disk_mbr;
 
 void menu()
 {
@@ -51,7 +48,10 @@ void menu()
 
 void print_mbr(MasterBootRecord * mbr)
 {
-	printf("Disk signature: 0x%04x\n", *mbr->DiskSignature);
+	printf("Disk signature: 0x");
+	for (int c = 3; c >= 0; c--)
+		printf("%x", mbr->DiskSignature[c]);
+	printf("\n");
 
 	printf("%-10s %-10s %-10s %-10s %-10s\n", "Partition", "Boot", "Start LBA", "Size", "Type");
 	for (int p = 0; p < 4; p++) {
@@ -215,6 +215,7 @@ int main(int argc, char *argv[])
 
 	show_mbr();
 	mbr = disk_mbr;
+	mbr.Sign = 0xaa55;
 
 	char *buffer;
 	size_t bufsize = 32;
