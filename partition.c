@@ -1,164 +1,93 @@
-#include <ctype.h>
 #include <errno.h>
-#include <fcntl.h>
 #include <getopt.h>
 #include <stdio.h>
-#include <sys/stat.h>
 #include <stdlib.h>
-#include <stdint.h>
 #include <string.h>
-#include <unistd.h>
 
-#pragma pack(1)
-typedef struct {
-	uint8_t BootIndicator;
-	uint8_t StartHead;
-	uint8_t StartSector;
-	uint8_t StartTrack;
-	uint8_t OSIndicator;
-	uint8_t EndHead;
-	uint8_t EndSector;
-	uint8_t EndTrack;
-	uint32_t StartingLBA;
-	uint32_t Size;
-} PartitionRecord;
+#include "mbr.h"
 
-typedef struct {
-	uint8_t BootCode[440];
-	uint8_t DiskSignature[4];
-	uint8_t Reserved[2];
-	PartitionRecord Partition[4];
-	uint16_t Sign;
-} MasterBootRecord;
-#pragma pack()
-
-int output;
-MasterBootRecord mbr, disk_mbr;
-
-void menu()
+int read_mbr(const char *filename, mbr_t * mbr)
 {
-	printf("\n");
-	printf("p\tprint partition table\n");
-	printf("t\tshow partition table on disk\n");
-	printf("w\twrite partition table to disk\n");
-	printf("n\tnew partition\n");
-	printf("h\tshow help\n");
-	printf("q\tquit\n");
-}
-
-void print_mbr(MasterBootRecord * mbr)
-{
-	printf("Disk signature: 0x");
-	for (int c = 3; c >= 0; c--)
-		printf("%x", mbr->DiskSignature[c]);
-	printf("\n");
-
-	printf("%-10s %-10s %-10s %-10s %-10s\n", "Partition", "Boot", "Start LBA", "Size", "Type");
-	for (int p = 0; p < 4; p++) {
-		if (mbr->Partition[p].Size > 0)
-			printf("%-10d %-10c %-10d %-10d %-10x\n", p + 1,
-			       mbr->Partition[p].BootIndicator ? '*' : ' ', mbr->Partition[p].StartingLBA,
-			       mbr->Partition[p].Size, mbr->Partition[p].OSIndicator);
-	}
-}
-
-void show_mbr()
-{
-	if (read(output, &disk_mbr, sizeof(disk_mbr)) != sizeof(disk_mbr)) {
-		printf("No MBR present on disk\n");
-	} else {
-		print_mbr(&disk_mbr);
-	}
-
-	lseek(output, 0, SEEK_SET);
-}
-
-int write_mbr()
-{
-	if (write(output, &mbr, sizeof(mbr)) != sizeof(mbr)) {
+	FILE *disk = fopen(filename, "wb+");
+	if (!disk) {
 		return -1;
 	}
 
-	lseek(output, 0, SEEK_SET);
+	if (!fread(mbr, sizeof(mbr_t), 1, disk)) {
+		return -2;
+	}
+
+	fclose(disk);
 	return 0;
 }
 
-void create_partition()
+int write_mbr(const char *filename, mbr_t * mbr)
 {
-	char *buffer;
-	size_t bufsize = 32;
-	PartitionRecord part;
-	int id = 0;
-
-	buffer = (char *)malloc(bufsize * sizeof(char));
-	if (buffer == NULL) {
-		fprintf(stderr, "%s\n", strerror(errno));
-		exit(EXIT_FAILURE);
+	FILE *disk = fopen(filename, "rb+");
+	if (!disk) {
+		return -1;
 	}
 
-	printf("Partition [%d]: ", id + 1);
-	getline(&buffer, &bufsize, stdin);
-	buffer[strcspn(buffer, "\n")] = 0;
-
-	if (isdigit(*buffer)) {
-		id = atoi(buffer) - 1;
-		if (id > 4)
-			id = 4;
+	if (!fwrite(mbr, sizeof(mbr_t), 1, disk)) {
+		return -1;
 	}
 
-	if (id > 0) {
-		printf("Start LBA [%d]: ", mbr.Partition[id - 1].StartingLBA + mbr.Partition[id - 1].Size + 1);
-	} else {
-		printf("Start LBA [%d]: ", 0);
+	fclose(disk);
+	return 0;
+}
+
+void create_partition(mbr_t * mbr)
+{
+	int index, prev = 0;
+	char bootable;
+
+	for (int i = 0; i < NUM_PARTITIONS; i++) {
+		if (mbr->partitions[i].type == 0 && mbr->partitions[i].size == 0) {
+			index = i;
+			break;
+		}
 	}
 
-	getline(&buffer, &bufsize, stdin);
-	buffer[strcspn(buffer, "\n")] = 0;
+	printf("Partition ID (e.g., %d): ", index + 1);
+	scanf(" %d", &index);
 
-	if (isdigit(*buffer)) {
-		part.StartingLBA = atoi(buffer);
-	} else {
-		part.StartingLBA = 0;
+	if (index > 4 || index < 1) {
+		printf("Invalid partition ID\n");
+		return;
 	}
+	index--;
 
-	printf("Size in sectors [%d]: ", 1);
+	partition_entry_t *entry = &mbr->partitions[index];
 
-	getline(&buffer, &bufsize, stdin);
-	buffer[strcspn(buffer, "\n")] = 0;
+	if (index > 1)
+		prev = index - 2;
 
-	if (isdigit(*buffer)) {
-		part.Size = atoi(buffer);
-	} else {
-		part.Size = 1;
+	printf("Bootable partition (y/n): ");
+	scanf(" %c", &bootable);
+	entry->boot = (bootable == 'y') ? 0x80 : 0x00;
+
+	printf("Partition type (e.g., 0x%02x): ", entry->type);
+	scanf(" %hhx", &entry->type);
+
+	printf("Start sector (e.g., %d): ", mbr->partitions[prev].start_lba + mbr->partitions[prev].size + 1);
+	scanf(" %u", &entry->start_lba);
+
+	printf("Number of sectors (e.g., %d): ", entry->size);
+	scanf(" %u", &entry->size);
+}
+
+void display_partitions(mbr_t * mbr)
+{
+	printf("%-10s %-10s %-10s %-10s %-4s\n", "Partition", "Bootable", "Start LBA", "Sectors", "Type");
+	for (int i = 0; i < NUM_PARTITIONS; i++) {
+		partition_entry_t *entry = &mbr->partitions[i];
+
+		if (entry->type == 0 && entry->size == 0)
+			continue;
+
+		printf("%-10d %-10c %-10d %-10d 0x%02X\n", i + 1, entry->boot ? '*' : ' ', entry->start_lba,
+		       entry->size, entry->type);
 	}
-
-	printf("Partition type [%d]: ", 0);
-
-	getline(&buffer, &bufsize, stdin);
-	buffer[strcspn(buffer, "\n")] = 0;
-
-	if (isdigit(*buffer)) {
-		part.OSIndicator = atoi(buffer);
-	} else {
-		part.OSIndicator = 0;
-	}
-
-	printf("Bootable [n]: ");
-
-	getline(&buffer, &bufsize, stdin);
-	buffer[strcspn(buffer, "\n")] = 0;
-
-	if (!strcmp(buffer, "y")) {
-		part.BootIndicator = 0x80;
-	} else {
-		part.BootIndicator = 0;
-	}
-
-	mbr.Partition[id] = part;
-
-	print_mbr(&mbr);
-
-	free(buffer);
 }
 
 void usage(char *bin)
@@ -169,95 +98,70 @@ void usage(char *bin)
 
 int main(int argc, char *argv[])
 {
-	char *file = NULL;
-
+	mbr_t mbr;
+	int done = 0;
+	const char *filename = "disk.img";
 	int c;
 
 	while ((c = getopt(argc, argv, "h")) != -1) {
 		switch (c) {
 		case 'h':
 			usage(argv[0]);
-			exit(EXIT_SUCCESS);
+			return 0;
 			break;
+
 		case '?':
 			usage(argv[0]);
-			exit(EXIT_FAILURE);
+			return 1;
 			break;
 		}
 	}
 
-	if (optind < argc) {
-		file = argv[optind];
+	if (optind < argc)
+		filename = argv[optind];
+
+	// Read MBR from disk
+	if (read_mbr(filename, &mbr) == -1) {
+		fprintf(stderr, "%s: %s, %s\n", argv[0], filename, strerror(errno));
+		return 1;
 	}
 
-	if (!file) {
-		usage(argv[0]);
-		exit(EXIT_FAILURE);
+	if (mbr.boot_signature != 0xaa55)
+		mbr.boot_signature = 0xaa55;
+
+	// Display MBR
+	printf("Disk signature: %.8x\n", *mbr.disk_signature);
+
+	char option;
+	while (!done) {
+		display_partitions(&mbr);
+		printf("Do you want to create/edit a partition? (y/n): ");
+		scanf(" %c", &option);
+
+		switch (option) {
+		case 'y':
+			create_partition(&mbr);
+			break;
+
+		case 'n':
+			done = 1;
+			break;
+
+		default:
+			printf("Invalid input: %c\n", option);
+			break;
+		}
+
 	}
 
-	output = open(file, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
+	printf("Do you want to write the partition table back to disk (y/n)?: ");
+	scanf(" %c", &option);
 
-	if (output == -1) {
-		fprintf(stderr, "%s: %s\n", argv[0], strerror(errno));
-		exit(EXIT_FAILURE);
-	}
-
-	struct stat sb;
-	if (stat(file, &sb) == -1) {
-		fprintf(stderr, "%s: %s\n", argv[0], strerror(errno));
-		exit(EXIT_FAILURE);
-	}
-
-	if ((sb.st_mode & S_IFMT) != S_IFBLK && (sb.st_mode & S_IFMT) != S_IFREG) {
-		fprintf(stderr, "%s: %s is not supported as output\n", argv[0], file);
-		exit(EXIT_FAILURE);
-	}
-
-	show_mbr();
-	mbr = disk_mbr;
-	mbr.Sign = 0xaa55;
-
-	char *buffer;
-	size_t bufsize = 32;
-
-	buffer = (char *)malloc(bufsize * sizeof(char));
-	if (buffer == NULL) {
-		fprintf(stderr, "%s: %s\n", argv[0], strerror(errno));
-		exit(EXIT_FAILURE);
-	}
-
-	menu();
-	while (strcmp(buffer, "q")) {
-		getline(&buffer, &bufsize, stdin);
-		buffer[strcspn(buffer, "\n")] = 0;
-
-		if (strcmp(buffer, "h") == 0)
-			menu();
-
-		if (strcmp(buffer, "p") == 0)
-			print_mbr(&mbr);
-
-		if (strcmp(buffer, "t") == 0)
-			show_mbr();
-
-		if (strcmp(buffer, "n") == 0)
-			create_partition();
-
-		if (strcmp(buffer, "w") == 0) {
-
-			if (write_mbr() == -1) {
-				fprintf(stderr, "%s: %s\n", argv[0], strerror(errno));
-				exit(EXIT_FAILURE);
-			}
-			printf("Table written to disk.\n");
+	if (option == 'y') {
+		if (write_mbr(filename, &mbr) != 0) {
+			fprintf(stderr, "%s: %s\n", argv[0], strerror(errno));
+			return 1;
 		}
 	}
 
-	if (close(output) == -1) {
-		fprintf(stderr, "%s: %s\n", argv[0], strerror(errno));
-		exit(EXIT_FAILURE);
-	}
-
-	free(buffer);
-	exit(EXIT_SUCCESS);
 }

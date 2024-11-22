@@ -9,7 +9,7 @@ all: $(BINARIES)
 
 ${BUILD_DIR}/%: %.c
 	@mkdir -p bin
-	$(CC) -Wall $^ -o $@
+	$(CC) -Wall -g $^ -o $@
 
 clean:
 	rm -r bin
