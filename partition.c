@@ -92,19 +92,27 @@ void display_partitions(mbr_t * mbr)
 
 void usage(char *bin)
 {
-	printf("usage: %s file\n", bin);
-	printf("\t\tfile: name of file to partition\n");
+	printf("Usage: %s [options] <file>\n", bin);
+	printf("\n");
+	printf("Options:\n");
+	printf("  -h		show this help message and exit\n");
+	printf("  -l		list partitions and exit\n");
 }
 
 int main(int argc, char *argv[])
 {
 	mbr_t mbr;
 	int done = 0;
+	char list_flag = 0;
 	const char *filename = "disk.img";
 	int c;
 
-	while ((c = getopt(argc, argv, "h")) != -1) {
+	while ((c = getopt(argc, argv, "hl")) != -1) {
 		switch (c) {
+		case 'l':
+			list_flag = 1;
+			break;
+
 		case 'h':
 			usage(argv[0]);
 			return 0;
@@ -117,8 +125,12 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (optind < argc)
+	if (optind < argc) {
 		filename = argv[optind];
+	} else {
+		usage(argv[0]);
+		return 1;
+	}
 
 	// Read MBR from disk
 	if (read_mbr(filename, &mbr) == -1) {
@@ -126,8 +138,10 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	if (mbr.boot_signature != 0xaa55)
-		mbr.boot_signature = 0xaa55;
+	if (list_flag) {
+		display_partitions(&mbr);
+		return 0;
+	}
 
 	// Display MBR
 	printf("Disk signature: %.8x\n", *mbr.disk_signature);
@@ -164,5 +178,5 @@ int main(int argc, char *argv[])
 		}
 	}
 
-
+	return 0;
 }
