@@ -48,8 +48,14 @@ typedef struct {
 	uint16_t cluster;
 	uint32_t size;
 } root_entry_t;
+#pragma pack()
 
-bpb16_t *get_bpb16(FILE * disk)
+bpb16_t *bpb16;
+fat12_t *fat12;
+root_entry_t *rootdir;
+FILE *disk;
+
+bpb16_t *get_bpb16()
 {
 	bpb16_t *bpb = (bpb16_t *) malloc(sizeof(bpb16_t));
 
@@ -69,62 +75,64 @@ bpb16_t *get_bpb16(FILE * disk)
 	return bpb;
 }
 
-int display_bpb16(bpb16_t * bpb)
+int display_bpb16()
 {
 
 	printf("Jump instruction:\t");
 	for (int i = 0; i < 3; i++) {
-		printf("%02X ", bpb->jmp[i]);
+		printf("%02X ", bpb16->jmp[i]);
 	}
 	printf("\n");
 
 	printf("OEM name:\t\t");
 	for (int i = 0; i < 8; i++) {
-		printf("%c", (bpb->oem_name[i] >= 32 && bpb->oem_name[i] <= 126) ? bpb->oem_name[i] : '.');
+		printf("%c", (bpb16->oem_name[i] >= 32 && bpb16->oem_name[i] <= 126) ? bpb16->oem_name[i] : '.');
 	}
 	printf("\n");
 
-	printf("Bytes per sector:\t%u\n", bpb->bytes_per_sector);
+	printf("Bytes per sector:\t%u\n", bpb16->bytes_per_sector);
 
-	printf("Sectors per cluster:\t%u\n", bpb->sectors_per_cluster);
+	printf("Sectors per cluster:\t%u\n", bpb16->sectors_per_cluster);
 
-	printf("Reserved sectors:\t%u\n", bpb->reserved_sectors);
+	printf("Reserved sectors:\t%u\n", bpb16->reserved_sectors);
 
-	printf("Number of FATs:\t\t%u\n", bpb->num_fats);
+	printf("Number of FATs:\t\t%u\n", bpb16->num_fats);
 
-	printf("Root directory entries:\t%u\n", bpb->root_entries);
+	printf("Root directory entries:\t%u\n", bpb16->root_entries);
 
-	printf("Total sectors (16-bit):\t%u\n", bpb->total_sectors);
+	printf("Total sectors (16-bit):\t%u\n", bpb16->total_sectors);
 
-	printf("Media type:\t\t0x%02X\n", bpb->media_type);
+	printf("Media type:\t\t0x%02X\n", bpb16->media_type);
 
-	printf("FAT size:\t\t%u\n", bpb->fat_size);
+	printf("FAT size:\t\t%u\n", bpb16->fat_size);
 
-	printf("Sectors per track:\t%u\n", bpb->sectors_per_track);
+	printf("Sectors per track:\t%u\n", bpb16->sectors_per_track);
 
-	printf("Number of heads:\t%u\n", bpb->num_heads);
+	printf("Number of heads:\t%u\n", bpb16->num_heads);
 
-	printf("Hidden sectors:\t\t%u\n", bpb->hidden_sectors);
+	printf("Hidden sectors:\t\t%u\n", bpb16->hidden_sectors);
 
-	printf("Total sectors (32-bit):\t%u\n", bpb->total_sectors_32);
+	printf("Total sectors (32-bit):\t%u\n", bpb16->total_sectors_32);
 
-	printf("Drive number:\t\t0x%02X\n", bpb->drive_number);
+	printf("Drive number:\t\t0x%02X\n", bpb16->drive_number);
 
-	printf("Reserved:\t\t0x%02X\n", bpb->reserved);
+	printf("Reserved:\t\t0x%02X\n", bpb16->reserved);
 
-	printf("Ext. boot signature:\t0x%02X\n", bpb->ext_boot_signature);
+	printf("Ext. boot signature:\t0x%02X\n", bpb16->ext_boot_signature);
 
-	printf("Serial number:\t\t0x%08X\n", bpb->serial_number);
+	printf("Serial number:\t\t0x%08X\n", bpb16->serial_number);
 
 	printf("Volume label:\t\t");
 	for (int i = 0; i < 11; i++) {
-		printf("%c", (bpb->volume_label[i] >= 32 && bpb->volume_label[i] <= 126) ? bpb->volume_label[i] : '.');
+		printf("%c",
+		       (bpb16->volume_label[i] >= 32 && bpb16->volume_label[i] <= 126) ? bpb16->volume_label[i] : '.');
 	}
 	printf("\n");
 
 	printf("File system:\t\t");
 	for (int i = 0; i < 8; i++) {
-		printf("%c", (bpb->file_system[i] >= 32 && bpb->file_system[i] <= 126) ? bpb->file_system[i] : '.');
+		printf("%c",
+		       (bpb16->file_system[i] >= 32 && bpb16->file_system[i] <= 126) ? bpb16->file_system[i] : '.');
 	}
 	printf("\n");
 
@@ -133,20 +141,20 @@ int display_bpb16(bpb16_t * bpb)
 		if (i % 16 == 0 && i != 0) {
 			printf("\n\t\t\t");
 		}
-		printf("%02X ", bpb->boot_code[i]);
+		printf("%02X ", bpb16->boot_code[i]);
 	}
 	printf("\n");
 
-	printf("Signature:\t\t0x%04X\n", bpb->signature);
+	printf("Signature:\t\t0x%04X\n", bpb16->signature);
 
 	return 0;
 }
 
-fat12_t *get_fat12(FILE * disk, bpb16_t * bpb)
+fat12_t *get_fat12()
 {
 	// Calculate base address
-	uint32_t offset = bpb->reserved_sectors * bpb->bytes_per_sector;
-	uint32_t size = bpb->fat_size * bpb->bytes_per_sector;
+	uint32_t offset = bpb16->reserved_sectors * bpb16->bytes_per_sector;
+	uint32_t size = bpb16->fat_size * bpb16->bytes_per_sector;
 
 	// Read FAT from disk
 	fseek(disk, offset, SEEK_SET);
@@ -159,32 +167,32 @@ fat12_t *get_fat12(FILE * disk, bpb16_t * bpb)
 	return fat;
 }
 
-uint16_t get_fat12_entry(uint16_t i, fat12_t * fat)
+uint16_t get_fat12_entry(uint16_t i)
 {
 	int entry_index = i * 12 / 8;
 	int entry_offset = (i * 12) % 8;
-	uint16_t entry = (fat[entry_index] >> entry_offset) | (fat[entry_index + 1] << (8 - entry_offset));
+	uint16_t entry = (fat12[entry_index] >> entry_offset) | (fat12[entry_index + 1] << (8 - entry_offset));
 
 	return entry;
 }
 
-uint32_t cluster_to_address(uint16_t cluster, bpb16_t * bpb)
+uint32_t cluster_to_address(uint16_t cluster)
 {
 
-	return (bpb->reserved_sectors + bpb->num_fats * bpb->fat_size +
-		(cluster - 2) * bpb->sectors_per_cluster) * bpb->bytes_per_sector +
-	    bpb->root_entries * sizeof(root_entry_t);
+	return (bpb16->reserved_sectors + bpb16->num_fats * bpb16->fat_size +
+		(cluster - 2) * bpb16->sectors_per_cluster) * bpb16->bytes_per_sector +
+	    bpb16->root_entries * sizeof(root_entry_t);
 }
 
-void display_fat12(fat12_t * fat, bpb16_t * bpb)
+void display_fat12()
 {
-	uint32_t size = bpb->fat_size * bpb->bytes_per_sector;
+	uint32_t size = bpb16->fat_size * bpb16->bytes_per_sector;
 	int entries = size * 8 / 12;
 	printf("FAT12 entries:\n");
 	for (int i = 0; i < entries; i++) {
 		int entry_index = i * 12 / 8;
 		int entry_offset = (i * 12) % 8;
-		uint16_t entry = (fat[entry_index] >> entry_offset) | (fat[entry_index + 1] << (8 - entry_offset));
+		uint16_t entry = (fat12[entry_index] >> entry_offset) | (fat12[entry_index + 1] << (8 - entry_offset));
 
 		if (i % 4 == 0)
 			printf("\n");
@@ -198,12 +206,12 @@ void display_fat12(fat12_t * fat, bpb16_t * bpb)
 	printf("\n");
 }
 
-root_entry_t *get_rootdir(FILE * disk, bpb16_t * bpb)
+root_entry_t *get_rootdir()
 {
 
 	// Calculate base address
-	uint32_t offset = (bpb->reserved_sectors + bpb->num_fats * bpb->fat_size) * bpb->bytes_per_sector;
-	uint32_t size = (bpb->root_entries * sizeof(root_entry_t));
+	uint32_t offset = (bpb16->reserved_sectors + bpb16->num_fats * bpb16->fat_size) * bpb16->bytes_per_sector;
+	uint32_t size = (bpb16->root_entries * sizeof(root_entry_t));
 
 	// Read root directory from disk
 	fseek(disk, offset, SEEK_SET);
@@ -252,14 +260,14 @@ void get_fullname(char *buffer, const root_entry_t * entry)
 	}
 }
 
-void display_rootdir(char details, root_entry_t * rootdir, bpb16_t * bpb)
+void display_rootdir(char details)
 {
 	char name[13];
 	uint8_t hours, minutes, dseconds, month, day;
 	uint16_t year;
 
 	// Print all valid entries
-	for (int i = 0; i < bpb->root_entries; i++) {
+	for (int i = 0; i < bpb16->root_entries; i++) {
 
 		if (rootdir[i].filename[0] == 0)
 			continue;
@@ -283,36 +291,66 @@ void display_rootdir(char details, root_entry_t * rootdir, bpb16_t * bpb)
 	}
 }
 
-void get_file(const char *filename, FILE * disk, root_entry_t * rootdir, fat12_t * fat, bpb16_t * bpb)
+void get_file(const char *filename)
 {
 	char name[13];
 
-	for (int i = 0; i < bpb->root_entries; i++) {
+	for (int i = 0; i < bpb16->root_entries; i++) {
 		if (rootdir[i].filename[0] == 0)
 			continue;
 
 		get_fullname(name, &rootdir[i]);
 
 		if (strcmp(name, filename) == 0) {
-			char *buffer = (char *)malloc(bpb->sectors_per_cluster * bpb->bytes_per_sector);
+			char *buffer = (char *)malloc(bpb16->sectors_per_cluster * bpb16->bytes_per_sector);
 
 			uint32_t offset;
 			uint16_t cluster = rootdir[i].cluster;
 
 			while (cluster < 0xff6 && cluster != 0) {
 
-				offset = cluster_to_address(cluster, bpb);
+				offset = cluster_to_address(cluster);
 				fseek(disk, offset, SEEK_SET);
-				fread(buffer, 1, bpb->sectors_per_cluster * bpb->bytes_per_sector, disk);
+				fread(buffer, 1, bpb16->sectors_per_cluster * bpb16->bytes_per_sector, disk);
 				printf("%s", buffer);
 
-				cluster = get_fat12_entry(cluster, fat);
+				cluster = get_fat12_entry(cluster);
 			}
 
 			free(buffer);
 			break;
 		}
 	}
+}
+
+int parse_disk(const char *disk_name)
+{
+	disk = fopen(disk_name, "rb");
+
+	if (!disk) {
+		fprintf(stderr, "%s, %s\n", disk_name, strerror(errno));
+	}
+
+	bpb16 = get_bpb16();
+	if (bpb16 == NULL)
+		return -1;
+
+	fat12 = get_fat12();
+	if (fat12 == NULL)
+		return -1;
+
+	rootdir = get_rootdir();
+	if (rootdir == NULL)
+		return -1;
+
+	return 0;
+}
+
+void cleanup()
+{
+	free(bpb16);
+	free(fat12);
+	free(rootdir);
 }
 
 void usage(char *bin)
@@ -370,37 +408,22 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	FILE *disk = fopen(filename, "rb");
-
-	bpb16_t *bpb = get_bpb16(disk);
-	if (bpb == NULL)
-		return -1;
+	parse_disk(filename);
 
 	if (bpb_flag) {
-		display_bpb16(bpb);
+		display_bpb16();
 	}
-
-	fat12_t *fat = get_fat12(disk, bpb);
-	if (fat == NULL)
-		return -1;
 
 	if (fat_flag) {
-		display_fat12(fat, bpb);
+		display_fat12();
 	}
 
-	root_entry_t *rootdir = get_rootdir(disk, bpb);
-	if (rootdir == NULL)
-		return -1;
-
 	if (list_flag) {
-		display_rootdir(details_flag, rootdir, bpb);
+		display_rootdir(details_flag);
 	}
 
 	fclose(disk);
 
-	free(bpb);
-	free(fat);
-	free(rootdir);
-
+	cleanup();
 	return 0;
 }
