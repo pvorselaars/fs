@@ -31,6 +31,8 @@ typedef struct {
 	uint16_t signature;
 } bpb16_t;
 
+typedef uint8_t fat12_t;
+
 typedef struct {
 	uint8_t filename[8];
 	uint8_t extension[3];
@@ -42,14 +44,21 @@ typedef struct {
 	uint32_t size;
 } root_entry_t;
 
-int display_bpb16(FILE * disk, bpb16_t * bpb)
+bpb16_t * get_bpb16(FILE * disk)
 {
+	bpb16_t *bpb = (bpb16_t *)malloc(sizeof(bpb16_t));
 
 	fseek(disk, 0, SEEK_SET);
 	if (!fread(bpb, sizeof(*bpb), 1, disk)) {
 		fprintf(stderr, "%s", strerror(errno));
-		return -1;
+		return NULL;
 	}
+
+	return bpb;
+}
+
+int display_bpb16(bpb16_t * bpb)
+{
 
 	printf("Jump instruction:\t");
 	for (int i = 0; i < 3; i++) {
@@ -121,22 +130,25 @@ int display_bpb16(FILE * disk, bpb16_t * bpb)
 	return 0;
 }
 
-int display_fat12(FILE * disk, bpb16_t * bpb)
-{
-
+fat12_t * get_fat12(FILE * disk, bpb16_t * bpb){
 	// Calculate base address
 	uint32_t offset = bpb->reserved_sectors * bpb->bytes_per_sector;
 	uint32_t size = bpb->fat_size * bpb->bytes_per_sector;
 
 	// Read FAT from disk
 	fseek(disk, offset, SEEK_SET);
-	uint8_t *fat = (uint8_t *) malloc(size);
+	fat12_t *fat = (fat12_t *) malloc(size);
 	if (!fread(fat, 1, size, disk)) {
 		fprintf(stderr, "%s", strerror(errno));
-		return -1;
+		return NULL;
 	}
 
-	// Print all entries
+	return fat;
+}
+
+void display_fat12(fat12_t * fat, bpb16_t * bpb)
+{
+	uint32_t size = bpb->fat_size * bpb->bytes_per_sector;
 	int entries = size * 8 / 12;
 	printf("FAT12 entries:\n");
 	for (int i = 0; i < entries; i++) {
@@ -155,65 +167,76 @@ int display_fat12(FILE * disk, bpb16_t * bpb)
 	}
 	printf("\n");
 	printf("\n");
-
-	free(fat);
-	return 0;
 }
 
-int display_rootdir(FILE * disk, bpb16_t * bpb)
+root_entry_t * get_rootdir(FILE * disk, bpb16_t * bpb)
 {
+
 	// Calculate base address
 	uint32_t offset = (bpb->reserved_sectors + bpb->num_fats * bpb->fat_size) * bpb->bytes_per_sector;
 	uint32_t size = (bpb->root_entries * sizeof(root_entry_t));
 
 	// Read root directory from disk
 	fseek(disk, offset, SEEK_SET);
-	root_entry_t *root_dir = (root_entry_t *) malloc(size);
-	if (!fread(root_dir, 1, size, disk)) {
+	root_entry_t *rootdir = (root_entry_t *) malloc(size);
+	if (!fread(rootdir, 1, size, disk)) {
 		fprintf(stderr, "%s", strerror(errno));
-		return -1;
+		return NULL;
 	}
 
+	return rootdir;
+}
+
+void display_rootdir(root_entry_t * rootdir, bpb16_t * bpb)
+{
 	// Print all valid entries
 	printf("Root directory entries:\n");
 	for (int i = 0; i < bpb->root_entries; i++){
 
-		if (root_dir[i].filename[0] == 0)
+		if (rootdir[i].filename[0] == 0)
 			continue;
 
 		// Print filename and extension
 		for (int c = 0; c < 8; c++) {
-			printf("%c", root_dir[i].filename[c]);
+			printf("%c", rootdir[i].filename[c]);
 		}
 		printf(".");
-		for (int c = 0; c < 3 && root_dir[i].extension[c] != 0; c++) {
-			printf("%c", root_dir[i].extension[c]);
+		for (int c = 0; c < 3 && rootdir[i].extension[c] != 0; c++) {
+			printf("%c", rootdir[i].extension[c]);
 		}
-		printf("\t%dB @%d\n", root_dir[i].size, root_dir[i].cluster);
+		printf("\t%dB @%d\n", rootdir[i].size, rootdir[i].cluster);
 	}
-
-	free(root_dir);
-	return 0;
 }
 
 int main(int argc, char *argv[])
 {
 
-	bpb16_t bpb;
 	const char *filename = "disk.img";
-
 	FILE *disk = fopen(filename, "rb");
 
-	if (display_bpb16(disk, &bpb) != 0)
+	bpb16_t *bpb = get_bpb16(disk);
+	if (bpb == NULL)
 		return -1;
 
-	if (display_fat12(disk, &bpb) != 0)
+	display_bpb16(bpb);
+
+	fat12_t *fat = get_fat12(disk, bpb);
+	if (fat == NULL)
 		return -1;
 
-	if (display_rootdir(disk, &bpb) != 0)
+	display_fat12(fat, bpb);
+
+	root_entry_t *rootdir = get_rootdir(disk, bpb);
+	if (rootdir == NULL)
 		return -1;
+
+	display_rootdir(rootdir, bpb);
 
 	fclose(disk);
+
+	free(bpb);
+	free(fat);
+	free(rootdir);
 
 	return 0;
 }
