@@ -44,9 +44,9 @@ typedef struct {
 	uint32_t size;
 } root_entry_t;
 
-bpb16_t * get_bpb16(FILE * disk)
+bpb16_t *get_bpb16(FILE * disk)
 {
-	bpb16_t *bpb = (bpb16_t *)malloc(sizeof(bpb16_t));
+	bpb16_t *bpb = (bpb16_t *) malloc(sizeof(bpb16_t));
 
 	fseek(disk, 0, SEEK_SET);
 	if (!fread(bpb, sizeof(*bpb), 1, disk)) {
@@ -130,7 +130,8 @@ int display_bpb16(bpb16_t * bpb)
 	return 0;
 }
 
-fat12_t * get_fat12(FILE * disk, bpb16_t * bpb){
+fat12_t *get_fat12(FILE * disk, bpb16_t * bpb)
+{
 	// Calculate base address
 	uint32_t offset = bpb->reserved_sectors * bpb->bytes_per_sector;
 	uint32_t size = bpb->fat_size * bpb->bytes_per_sector;
@@ -144,6 +145,23 @@ fat12_t * get_fat12(FILE * disk, bpb16_t * bpb){
 	}
 
 	return fat;
+}
+
+uint16_t get_fat12_entry(uint16_t i, fat12_t * fat)
+{
+	int entry_index = i * 12 / 8;
+	int entry_offset = (i * 12) % 8;
+	uint16_t entry = (fat[entry_index] >> entry_offset) | (fat[entry_index + 1] << (8 - entry_offset));
+
+	return entry;
+}
+
+uint32_t cluster_to_address(uint16_t cluster, bpb16_t * bpb)
+{
+
+	return (bpb->reserved_sectors + bpb->num_fats * bpb->fat_size +
+		(cluster - 2) * bpb->sectors_per_cluster) * bpb->bytes_per_sector +
+	    bpb->root_entries * sizeof(root_entry_t);
 }
 
 void display_fat12(fat12_t * fat, bpb16_t * bpb)
@@ -169,7 +187,7 @@ void display_fat12(fat12_t * fat, bpb16_t * bpb)
 	printf("\n");
 }
 
-root_entry_t * get_rootdir(FILE * disk, bpb16_t * bpb)
+root_entry_t *get_rootdir(FILE * disk, bpb16_t * bpb)
 {
 
 	// Calculate base address
@@ -191,7 +209,7 @@ void display_rootdir(root_entry_t * rootdir, bpb16_t * bpb)
 {
 	// Print all valid entries
 	printf("Root directory entries:\n");
-	for (int i = 0; i < bpb->root_entries; i++){
+	for (int i = 0; i < bpb->root_entries; i++) {
 
 		if (rootdir[i].filename[0] == 0)
 			continue;
@@ -205,6 +223,68 @@ void display_rootdir(root_entry_t * rootdir, bpb16_t * bpb)
 			printf("%c", rootdir[i].extension[c]);
 		}
 		printf("\t%dB @%d\n", rootdir[i].size, rootdir[i].cluster);
+	}
+}
+
+void get_file(const char *filename, FILE * disk, root_entry_t * rootdir, fat12_t * fat, bpb16_t * bpb)
+{
+	char name[9], ext[4], fullname[13];
+
+	for (int i = 0; i < bpb->root_entries; i++) {
+		if (rootdir[i].filename[0] == 0)
+			continue;
+
+		name[8] = '\0';
+		ext[3] = '\0';
+		fullname[0] = '\0';
+
+		memcpy(name, rootdir[i].filename, 8);
+		memcpy(ext, rootdir[i].extension, 3);
+
+		// null terminate space padded strings
+		for (int c = 7; c >= 0; c--) {
+			if (name[c] == ' ') {
+				name[c] = '\0';
+			} else {
+				break;
+			}
+		}
+
+		for (int c = 2; c >= 0; c--) {
+			if (ext[c] == ' ') {
+				ext[c] = '\0';
+			} else {
+				break;
+			}
+		}
+
+		if (ext[0] != '\0') {
+			strcat(fullname, name);
+			strcat(fullname, ".");
+			strcat(fullname, ext);
+		} else {
+			strcat(fullname, name);
+		}
+
+		if (strcmp(fullname, filename) == 0) {
+			char *buffer = (char *)malloc(bpb->sectors_per_cluster * bpb->bytes_per_sector);
+
+			uint32_t offset;
+			uint16_t cluster = rootdir[i].cluster;
+
+			while (cluster < 0xff6) {
+
+				offset = cluster_to_address(cluster, bpb);
+				fseek(disk, offset, SEEK_SET);
+				fread(buffer, 1, bpb->sectors_per_cluster * bpb->bytes_per_sector, disk);
+				printf("%s", buffer);
+
+				cluster = get_fat12_entry(cluster, fat);
+			}
+
+			free(buffer);
+			break;
+		}
 	}
 }
 
