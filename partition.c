@@ -6,6 +6,21 @@
 
 #include "mbr.h"
 
+static long disk_size;
+
+int get_disk_size(const char *filename)
+{
+	FILE *disk = fopen(filename, "rb");
+	if (!disk) {
+		return -1;
+	}
+
+	fseek(disk, 0, SEEK_END);
+	disk_size = ftell(disk);
+
+	return 0;
+}
+
 int read_mbr(const char *filename, mbr_t * mbr)
 {
 	FILE *disk = fopen(filename, "rb");
@@ -74,6 +89,10 @@ void create_partition(mbr_t * mbr)
 
 	printf("Number of sectors (e.g., %d): ", entry->size);
 	scanf(" %u", &entry->size);
+
+	if ((entry->start_lba + entry->size)*512 > disk_size){
+		entry->size = disk_size/512 - entry->start_lba;
+	}
 }
 
 void display_partitions(mbr_t * mbr)
@@ -142,6 +161,11 @@ int main(int argc, char *argv[])
 		display_partitions(&mbr);
 		return 0;
 	}
+
+
+	get_disk_size(filename);
+	if (mbr.boot_signature != 0xaa55)
+		mbr.boot_signature = 0xaa55;
 
 	// Display MBR
 	printf("Disk signature: %.8x\n", *mbr.disk_signature);
