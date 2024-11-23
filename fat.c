@@ -61,7 +61,6 @@ bpb16_t *get_bpb16()
 
 	fseek(disk, 0, SEEK_SET);
 	if (!fread(bpb, sizeof(*bpb), 1, disk)) {
-		fprintf(stderr, "%s", strerror(errno));
 		free(bpb);
 		return NULL;
 	}
@@ -160,7 +159,6 @@ fat12_t *get_fat12()
 	fseek(disk, offset, SEEK_SET);
 	fat12_t *fat = (fat12_t *) malloc(size);
 	if (!fread(fat, 1, size, disk)) {
-		fprintf(stderr, "%s", strerror(errno));
 		return NULL;
 	}
 
@@ -332,16 +330,22 @@ int parse_disk(const char *disk_name)
 	}
 
 	bpb16 = get_bpb16();
-	if (bpb16 == NULL)
+	if (bpb16 == NULL) {
+		fprintf(stderr, "Failed to parse boot parameter block\n");
 		return -1;
+	}
 
 	fat12 = get_fat12();
-	if (fat12 == NULL)
+	if (fat12 == NULL) {
+		fprintf(stderr, "Failed to parse FAT\n");
 		return -1;
+	}
 
 	rootdir = get_rootdir();
-	if (rootdir == NULL)
+	if (rootdir == NULL) {
+		fprintf(stderr, "Failed to parse root directory\n");
 		return -1;
+	}
 
 	return 0;
 }
